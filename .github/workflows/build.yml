@@ -20,7 +20,7 @@ jobs:
           java-version: 17
 
       - name: Install required utilities
-        run: sudo apt-get update && sudo apt-get install -y xargs findutils
+        run: sudo apt-get update && sudo apt-get install -y findutils
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
