@@ -27,8 +27,6 @@ jobs:
         with:
           gradle-home-cache-cleanup: true
           gradle-version: 8.5
-        env:
-          GRADLE_OPTS: -Xmx2048m
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
