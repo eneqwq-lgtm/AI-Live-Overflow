@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
 import java.io.File
+import java.util.Locale
 
 class ScreenshotObserver(
     private val context: android.content.Context,
