@@ -9,10 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_HOME: ${{ runner.home }}/android-sdk
-      ANDROID_SDK_ROOT: ${{ runner.home }}/android-sdk
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,15 +24,22 @@ jobs:
 
       - name: Install Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          set -euo pipefail
+          SDK_ROOT="$HOME/android-sdk"
+          echo "SDK_ROOT=$SDK_ROOT"
           echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-          mkdir -p /tmp/sdk-extract "$ANDROID_HOME/cmdline-tools"
+          rm -rf "$SDK_ROOT" /tmp/sdk-extract
+          mkdir -p /tmp/sdk-extract "$SDK_ROOT/cmdline-tools"
           curl -fsSL -o /tmp/sdk-extract/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q /tmp/sdk-extract/cmdtools.zip -d /tmp/sdk-extract/
-          mv /tmp/sdk-extract/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
-          ls -la "$ANDROID_HOME/cmdline-tools/latest/bin/" | head -5
-          yes 2>/dev/null | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          EXTRACTED=$(find /tmp/sdk-extract -mindepth 1 -maxdepth 1 -type d | head -1)
+          echo "extracted dir: $EXTRACTED"
+          mv "$EXTRACTED" "$SDK_ROOT/cmdline-tools/latest"
+          chmod +x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          echo "sdk.dir=$SDK_ROOT" > local.properties
+          cat local.properties
+          yes 2>/dev/null | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
+          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
