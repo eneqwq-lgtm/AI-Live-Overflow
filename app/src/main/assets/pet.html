@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeskPet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: transparent;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        #pet-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #pet {
+            width: 100%;
+            height: 100%;
+            transition: transform 0.3s ease;
+        }
+        #pet.tapped {
+            animation: bounce 0.3s ease;
+        }
+        #pet.double-tapped {
+            animation: spin 0.5s ease;
+        }
+        #pet.long-pressed {
+            animation: shake 0.5s ease;
+        }
+        #bubble {
+            position: absolute;
+            bottom: 160px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            opacity: 0;
+            pointer-events: none;
+            max-width: 140px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        #bubble.show {
+            animation: fadeInOut 2s ease forwards;
+        }
+        #bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid rgba(255, 255, 255, 0.95);
+        }
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+        }
+        @keyframes idle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        .idle {
+            animation: idle 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="pet-container">
+        <div id="bubble"></div>
+        <svg id="pet" class="idle" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="#FFB6C1"/>
+            <circle cx="35" cy="40" r="8" fill="#333"/>
+            <circle cx="65" cy="40" r="8" fill="#333"/>
+            <circle cx="37" cy="38" r="3" fill="#FFF"/>
+            <circle cx="67" cy="38" r="3" fill="#FFF"/>
+            <ellipse cx="50" cy="60" rx="15" ry="8" fill="#FF69B4"/>
+            <circle cx="30" cy="55" r="10" fill="#FFC0CB" opacity="0.6"/>
+            <circle cx="70" cy="55" r="10" fill="#FFC0CB" opacity="0.6"/>
+        </svg>
+    </div>
+
+    <script>
+        const pet = document.getElementById('pet');
+        const bubble = document.getElementById('bubble');
+
+        const reactions = {
+            tap: ['Hey!', 'Hmm?', 'What?', 'Yay!', 'Pet me more~', 'Hi there!'],
+            doubleTap: ['Wheee!', 'Dizzy!', 'Spin spin!', 'Whoa!'],
+            longPress: ['!!', 'Too long!', 'Embarrassed...', '///'],
+            screenshot: ['Cheese!', 'Did you take a photo?', 'Strike a pose!', 'Caught!'],
+            appChange: ['Oh, new app!', 'Switching~', 'What are you doing?']
+        };
+
+        function showBubble(text, style = 'default') {
+            bubble.textContent = text;
+            bubble.className = 'show';
+            setTimeout(() => {
+                bubble.className = '';
+            }, 2000);
+        }
+
+        function getRandomReaction(type) {
+            const list = reactions[type] || reactions.tap;
+            return list[Math.floor(Math.random() * list.length)];
+        }
+
+        window.petEngine = {
+            onTap: function() {
+                pet.className = '';
+                void pet.offsetWidth;
+                pet.classList.add('tapped');
+                setTimeout(() => {
+                    pet.className = 'idle';
+                }, 300);
+                showBubble(getRandomReaction('tap'));
+            },
+            onDoubleTap: function() {
+                pet.className = '';
+                void pet.offsetWidth;
+                pet.classList.add('double-tapped');
+                setTimeout(() => {
+                    pet.className = 'idle';
+                }, 500);
+                showBubble(getRandomReaction('doubleTap'));
+            },
+            onLongPress: function() {
+                pet.className = '';
+                void pet.offsetWidth;
+                pet.classList.add('long-pressed');
+                setTimeout(() => {
+                    pet.className = 'idle';
+                }, 500);
+                showBubble(getRandomReaction('longPress'));
+            },
+            onScreenshot: function() {
+                showBubble(getRandomReaction('screenshot'));
+            },
+            onAppChanged: function(packageName) {
+                const reactions = {
+                    'com.instagram.android': 'Scrolling Instagram~',
+                    'com.twitter.android': 'Twitter time!',
+                    'com.facebook.katana': 'On Facebook~',
+                    'com.google.android.youtube': 'Watching videos!',
+                    'com.tencent.mm': 'WeChat~',
+                    'com.android.chrome': 'Browsing~'
+                };
+                const msg = reactions[packageName] || 'Switched app!';
+                showBubble(msg);
+            },
+            setState: function(state) {
+                if (state.mood) {
+                    console.log('Mood:', state.mood);
+                }
+                if (state.bubble) {
+                    showBubble(state.bubble);
+                }
+            }
+        };
+
+        setTimeout(() => {
+            const greetings = ['Hello!', 'I\'m here!', 'Pet me~', 'Yawn~'];
+            showBubble(greetings[Math.floor(Math.random() * greetings.length)]);
+        }, 1000);
+    </script>
+</body>
+</html>
