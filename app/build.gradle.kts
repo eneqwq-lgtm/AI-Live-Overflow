@@ -15,6 +15,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 小奈的 Supabase 后端（publishable key 设计为客户端可公开使用）
+        buildConfigField("String", "SUPABASE_URL", "\"https://qgtsfgviyagkeafqyqyo.supabase.co\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"sb_publishable_dxfFmg840ZpDF-8atWJTtw_uPdehf_v\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

@@ -124,3 +124,19 @@ create trigger update_mood_state_updated_at
 -- Realtime: Enable for tables you want to subscribe to
 alter publication supabase_realtime add table pet_state;
 alter publication supabase_realtime add table mood_state;
+
+-- AI → Pet 消息表（大脑推送气泡/情绪，桌宠 15 秒轮询）
+create table if not exists pet_messages (
+    id uuid primary key default uuid_generate_v4(),
+    bubble text,
+    text text,
+    mood text,
+    heat integer check (heat >= 0 and heat <= 100),
+    created_at timestamptz default now()
+);
+
+alter table pet_messages enable row level security;
+create policy "Allow all for anon" on pet_messages for all using (true);
+alter publication supabase_realtime add table pet_messages;
+
+create index idx_pet_messages_created_at on pet_messages(created_at desc);

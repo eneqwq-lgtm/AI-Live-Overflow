@@ -10,23 +10,26 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.deskpet.service.OverlayService
+import com.example.deskpet.util.SupabaseClient
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 配置 Supabase 后端（小奈的大脑连接通道）
+        SupabaseClient.configure(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY)
         setContentView(createMainView())
     }
 
     private fun createMainView(): android.widget.LinearLayout {
         val textView = TextView(this).apply {
-            text = "AI Desk Pet\n\nTap the button below to start the overlay service.\nMake sure all permissions are granted."
+            text = "小奈桌宠 🐱\n\n点击下方按钮启动悬浮窗桌宠。\n请确保已授予所有权限。"
             textSize = 16f
             setPadding(32, 32, 32, 32)
         }
 
         val button = Button(this).apply {
-            text = "Start Pet"
+            text = "启动小奈"
             setOnClickListener {
                 checkAndStartService()
             }
