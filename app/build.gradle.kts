@@ -17,7 +17,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // 小米/MIUI 安装器对只有 v2 签名的 APK 报"解析包出现问题"。
+        // 隐式 debug 配置的 enableV1Signing 在 AGP 8.x Kotlin DSL 下不生效,
+        // 这里显式创建签名配置并绑定到 debug buildType,强制 v1+v2。
+        create("deskpetDebug") {
+            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "AndroidDebugKey"
+            keyPassword = "android"
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("deskpetDebug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

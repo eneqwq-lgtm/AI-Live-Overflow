@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(createMainView())
     }
 
-    private fun createMainView(): TextView {
+    private fun createMainView(): android.widget.LinearLayout {
         val textView = TextView(this).apply {
             text = "AI Desk Pet\n\nTap the button below to start the overlay service.\nMake sure all permissions are granted."
             textSize = 16f
@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
             addView(button)
         }
 
-        return textView
+        return container
     }
 
     private fun checkAndStartService() {
