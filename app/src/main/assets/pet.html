@@ -1,203 +1,638 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeskPet</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: transparent;
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-end;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: flex-end;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
         }
         #pet-container {
             position: relative;
-            width: 150px;
-            height: 150px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 150px; height: 150px;
+            display: flex; align-items: center; justify-content: center;
         }
         #pet {
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             transition: transform 0.3s ease;
         }
-        #pet.tapped {
-            animation: bounce 0.3s ease;
-        }
-        #pet.double-tapped {
-            animation: spin 0.5s ease;
-        }
-        #pet.long-pressed {
-            animation: shake 0.5s ease;
-        }
+        #pet.tapped { animation: bounce 0.3s ease; }
+        #pet.double-tapped { animation: spin 0.5s ease; }
+        #pet.long-pressed { animation: shake 0.5s ease; }
+        #pet.proud { animation: proud 0.6s ease; }
+        #pet.fling-left { animation: flingLeft 0.55s ease-in forwards; }
+        #pet.fling-right { animation: flingRight 0.55s ease-in forwards; }
+        #pet.climb-back { animation: climbBack 1.4s ease; }
+        #pet.waking { animation: wake 0.7s ease; }
+        #pet.asleep { filter: saturate(0.35) brightness(0.65); }
+        #pet.peek { animation: peek 3s ease infinite; }
+        #pet.carrying { animation: carry 2.2s ease infinite; }
+        #pet.nodding { animation: nod 1.6s ease infinite; }
+
+        /* ---- 气泡 5 种风格 ---- */
         #bubble {
-            position: absolute;
-            bottom: 160px;
-            left: 50%;
+            position: absolute; bottom: 160px; left: 50%;
             transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            padding: 8px 12px;
-            font-size: 12px;
-            color: #333;
+            border-radius: 12px; padding: 8px 12px; font-size: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            opacity: 0;
-            pointer-events: none;
-            max-width: 140px;
-            text-align: center;
-            white-space: nowrap;
+            opacity: 0; pointer-events: none; max-width: 160px;
+            text-align: center; white-space: nowrap; z-index: 50;
         }
-        #bubble.show {
-            animation: fadeInOut 2s ease forwards;
-        }
+        #bubble.show { animation: fadeInOut 2.2s ease forwards; }
         #bubble::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            left: 50%;
+            content: ''; position: absolute; bottom: -8px; left: 50%;
             transform: translateX(-50%);
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-top: 8px solid rgba(255, 255, 255, 0.95);
+            border-left: 8px solid transparent; border-right: 8px solid transparent;
+            border-top: 8px solid rgba(255,255,255,0.95);
         }
-        @keyframes bounce {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.2); }
+        #bubble.normal { background: rgba(255,255,255,0.95); color: #333; }
+        #bubble.normal::after { border-top-color: rgba(255,255,255,0.95); }
+        #bubble.pink { background: rgba(255,182,220,0.95); color: #a63a6f; }
+        #bubble.pink::after { border-top-color: rgba(255,182,220,0.95); }
+        #bubble.whisper { background: rgba(110,110,125,0.92); color: #eee; }
+        #bubble.whisper::after { border-top-color: rgba(110,110,125,0.92); }
+        #bubble.shout { background: rgba(255,75,75,0.95); color: #fff; font-weight: bold; }
+        #bubble.shout::after { border-top-color: rgba(255,75,75,0.95); }
+        #bubble.jealous { background: rgba(90,205,125,0.95); color: #0b5c2a; }
+        #bubble.jealous::after { border-top-color: rgba(90,205,125,0.95); }
+
+        /* ---- 情绪引擎:Heat 红色渐变 ---- */
+        #heat-overlay {
+            position: fixed; inset: 0; z-index: 99; pointer-events: none;
+            background: radial-gradient(ellipse at center, rgba(255,0,60,0) 45%, rgba(255,0,60,0.65) 100%);
+            opacity: 0; transition: opacity 1s ease;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+
+        /* ---- 孤独状态 ---- */
+        #sleep-zzz {
+            position: absolute; top: -6px; right: -8px; font-size: 14px; opacity: 0; z-index: 40;
         }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+        #sleep-zzz.show { animation: zzz 2s ease infinite; }
+        .bubble-float {
+            position: absolute; bottom: 120px; width: 8px; height: 8px;
+            border-radius: 50%; background: rgba(150,200,255,0.85); z-index: 30;
+            animation: floatUp 2.5s linear forwards; pointer-events: none;
+        }
+
+        /* ---- keyframes ---- */
+        @keyframes bounce { 0%,100%{transform:scale(1);} 50%{transform:scale(1.25);} }
+        @keyframes spin { 0%{transform:rotate(0);} 100%{transform:rotate(360deg);} }
+        @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-10px);} 75%{transform:translateX(10px);} }
+        @keyframes proud { 0%,100%{transform:scale(1);} 30%{transform:scale(1.15) rotate(-8deg);} 70%{transform:scale(1.15) rotate(8deg);} }
+        @keyframes flingLeft { 0%{transform:translateX(0);} 100%{transform:translateX(-180px) rotate(-40deg); opacity:0.3;} }
+        @keyframes flingRight { 0%{transform:translateX(0);} 100%{transform:translateX(180px) rotate(40deg); opacity:0.3;} }
+        @keyframes climbBack {
+            0%{transform:translateX(0) scale(0.8); opacity:0.3;}
+            40%{transform:translateX(-14px) scale(0.85); opacity:0.7;}
+            100%{transform:translateX(0) scale(1); opacity:1;}
+        }
+        @keyframes wake {
+            0%{transform:translateY(0) scale(0.9); filter:brightness(0.7);}
+            40%{transform:translateY(-12px) scale(1.1);}
+            100%{transform:translateY(0) scale(1); filter:brightness(1);}
         }
         @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
-            15% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+            0%{opacity:0; transform:translateX(-50%) translateY(10px);}
+            15%{opacity:1; transform:translateX(-50%) translateY(0);}
+            85%{opacity:1; transform:translateX(-50%) translateY(0);}
+            100%{opacity:0; transform:translateX(-50%) translateY(-10px);}
         }
-        @keyframes idle {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+        @keyframes idle { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
+        @keyframes zzz { 0%{opacity:0; transform:translateY(4px);} 50%{opacity:1;} 100%{opacity:0; transform:translateY(-8px);} }
+        @keyframes floatUp { 0%{transform:translateY(0); opacity:0.9;} 100%{transform:translateY(-70px); opacity:0;} }
+        @keyframes peek { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-14px);} 75%{transform:translateX(14px);} }
+        @keyframes carry {
+            0%,100%{transform:translateX(0);}
+            25%{transform:translateX(18px);}
+            75%{transform:translateX(-18px);}
         }
-        .idle {
-            animation: idle 3s ease-in-out infinite;
+        @keyframes nod {
+            0%,100%{transform:rotate(0);}
+            50%{transform:rotate(6deg) translateY(2px);}
         }
+        .idle { animation: idle 3s ease-in-out infinite; }
+        .face-group { transition: opacity 0.2s ease; }
     </style>
 </head>
 <body>
+    <div id="heat-overlay"></div>
     <div id="pet-container">
-        <div id="bubble"></div>
+        <div id="sleep-zzz">💤</div>
+        <div id="bubble" class="normal"></div>
         <svg id="pet" class="idle" viewBox="0 0 100 100">
+            <!-- 身体 -->
             <circle cx="50" cy="50" r="45" fill="#FFB6C1"/>
-            <circle cx="35" cy="40" r="8" fill="#333"/>
-            <circle cx="65" cy="40" r="8" fill="#333"/>
-            <circle cx="37" cy="38" r="3" fill="#FFF"/>
-            <circle cx="67" cy="38" r="3" fill="#FFF"/>
-            <ellipse cx="50" cy="60" rx="15" ry="8" fill="#FF69B4"/>
-            <circle cx="30" cy="55" r="10" fill="#FFC0CB" opacity="0.6"/>
-            <circle cx="70" cy="55" r="10" fill="#FFC0CB" opacity="0.6"/>
+            <circle cx="28" cy="62" r="9" fill="#FFC0CB" opacity="0.7"/>
+            <circle cx="72" cy="62" r="9" fill="#FFC0CB" opacity="0.7"/>
+
+            <!-- 默认:圆眼+微笑 -->
+            <g id="face-default" class="face-group">
+                <circle cx="35" cy="40" r="8" fill="#333"/>
+                <circle cx="65" cy="40" r="8" fill="#333"/>
+                <circle cx="37" cy="38" r="3" fill="#FFF"/>
+                <circle cx="67" cy="38" r="3" fill="#FFF"/>
+                <path d="M40 62 Q50 70 60 62" stroke="#FF69B4" stroke-width="4" fill="none" stroke-linecap="round"/>
+            </g>
+
+            <!-- 开心:弯眼+大笑 -->
+            <g id="face-happy" class="face-group" style="display:none">
+                <path d="M27 40 Q35 32 43 40" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path d="M57 40 Q65 32 73 40" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path d="M38 58 Q50 72 62 58" stroke="#FF69B4" stroke-width="5" fill="none" stroke-linecap="round"/>
+            </g>
+
+            <!-- 困:闭眼线+小嘴+Zzz -->
+            <g id="face-sleepy" class="face-group" style="display:none">
+                <path d="M27 42 L43 42" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <path d="M57 42 L73 42" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <circle cx="50" cy="62" r="4" fill="#FF69B4"/>
+            </g>
+
+            <!-- 兴奋:星星眼 -->
+            <g id="face-excited" class="face-group" style="display:none">
+                <circle cx="35" cy="40" r="10" fill="#333"/>
+                <circle cx="65" cy="40" r="10" fill="#333"/>
+                <circle cx="38" cy="37" r="4" fill="#FFF"/>
+                <circle cx="68" cy="37" r="4" fill="#FFF"/>
+                <path d="M40 62 Q50 70 60 62" stroke="#FF69B4" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <text x="20" y="25" font-size="10" fill="#FFD700">✦</text>
+                <text x="74" y="25" font-size="10" fill="#FFD700">✦</text>
+            </g>
+
+            <!-- 委屈:皱眉+嘟嘴 -->
+            <g id="face-sad" class="face-group" style="display:none">
+                <path d="M28 34 Q35 40 43 34" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path d="M57 34 Q65 40 73 34" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="50" cy="60" rx="8" ry="6" fill="#FF69B4"/>
+                <path d="M42 66 Q50 70 58 66" stroke="#333" stroke-width="2" fill="none"/>
+            </g>
+
+            <!-- 生气:怒眉+大嘴 -->
+            <g id="face-angry" class="face-group" style="display:none">
+                <path d="M27 32 L43 40" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path d="M57 40 L73 32" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <circle cx="35" cy="46" r="7" fill="#333"/>
+                <circle cx="65" cy="46" r="7" fill="#333"/>
+                <path d="M42 62 Q50 54 58 62" stroke="#FF69B4" stroke-width="4" fill="none" stroke-linecap="round"/>
+            </g>
+
+            <!-- 害羞:斜眼+腮红重 -->
+            <g id="face-shy" class="face-group" style="display:none">
+                <circle cx="38" cy="42" r="5" fill="#333"/>
+                <circle cx="62" cy="42" r="5" fill="#333"/>
+                <circle cx="28" cy="64" r="11" fill="#FF9EC4" opacity="0.9"/>
+                <circle cx="72" cy="64" r="11" fill="#FF9EC4" opacity="0.9"/>
+                <path d="M44 60 Q50 64 56 60" stroke="#FF69B4" stroke-width="3" fill="none" stroke-linecap="round"/>
+            </g>
+
+            <!-- 睡觉:闭眼+张嘴 -->
+            <g id="face-sleep" class="face-group" style="display:none">
+                <path d="M27 42 L43 42" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <path d="M57 42 L73 42" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <ellipse cx="50" cy="62" rx="5" ry="4" fill="#FF69B4"/>
+            </g>
         </svg>
     </div>
 
     <script>
         const pet = document.getElementById('pet');
         const bubble = document.getElementById('bubble');
+        const zzz = document.getElementById('sleep-zzz');
+        const heatOverlay = document.getElementById('heat-overlay');
+        const container = document.getElementById('pet-container');
 
-        const reactions = {
-            tap: ['Hey!', 'Hmm?', 'What?', 'Yay!', 'Pet me more~', 'Hi there!'],
-            doubleTap: ['Wheee!', 'Dizzy!', 'Spin spin!', 'Whoa!'],
-            longPress: ['!!', 'Too long!', 'Embarrassed...', '///'],
-            screenshot: ['Cheese!', 'Did you take a photo?', 'Strike a pose!', 'Caught!'],
-            appChange: ['Oh, new app!', 'Switching~', 'What are you doing?']
+        const faces = {
+            default: document.getElementById('face-default'),
+            happy: document.getElementById('face-happy'),
+            sleepy: document.getElementById('face-sleepy'),
+            excited: document.getElementById('face-excited'),
+            sad: document.getElementById('face-sad'),
+            angry: document.getElementById('face-angry'),
+            shy: document.getElementById('face-shy'),
+            sleep: document.getElementById('face-sleep')
         };
 
-        function showBubble(text, style = 'default') {
+        /* ================= 词池(自言自语) ================= */
+        const POOLS = {
+            daily: ['好想吃零食...', '今天也要加油鸭~', '天气不错呢', '摸鱼时间到', '饿了吗?去吃饭吧', '这个 app 看起来好玩'],
+            clingy: ['想你了~', '别走嘛...', '再陪我一会嘛', '哼,都不理我', '摸摸我嘛', '你在我就在'],
+            chaos: ['啊啊啊啊啊', '刚刚发生了什么?!', '有点混乱...', '我要闹了哦!', '哼!', '不管了先转两圈'],
+            night: ['还不睡?!', '凌晨了哦...', '再玩就秃了', '快去睡觉!!', '晚安...zZ', '熬夜冠军是你吗']
+        };
+
+        /* ================= 状态 ================= */
+        let heat = 0;
+        let currentFace = 'default';
+        let asleep = false;
+        let lonelyStage = 0;            // 0=正常 1=偷看 2=吹泡泡 3=搬东西 4=打瞌睡 5=睡着
+        let lastInteraction = Date.now();
+        let tapCount = 0;
+        let tapResetTimer = null;
+        let moodTimer = null, blinkTimer = null, lonelyCheckTimer = null;
+        let waterStage = 0;             // 喝水提醒递进
+        let waterTimer = null;
+        let pushCooldown = 0;
+        let heatInterval = null;
+
+        /* ================= 气泡 ================= */
+        function showBubble(text, style) {
+            style = style || 'normal';
+            bubble.className = style;
             bubble.textContent = text;
-            bubble.className = 'show';
-            setTimeout(() => {
-                bubble.className = '';
-            }, 2000);
+            void bubble.offsetWidth;
+            bubble.classList.add('show');
+            setTimeout(() => { bubble.className = style; }, 2300);
         }
 
-        function getRandomReaction(type) {
-            const list = reactions[type] || reactions.tap;
-            return list[Math.floor(Math.random() * list.length)];
+        /* ================= 表情 ================= */
+        function setFace(name, duration) {
+            if (!faces[name]) name = 'default';
+            if (moodTimer) clearTimeout(moodTimer);
+            Object.keys(faces).forEach(k => {
+                faces[k].style.display = (k === name) ? '' : 'none';
+            });
+            currentFace = name;
+            if (duration) moodTimer = setTimeout(() => { if (!asleep) setFace('default'); }, duration);
         }
 
+        function animate(cls, revertMs) {
+            pet.classList.remove('idle', 'peek', 'carrying', 'nodding', 'asleep');
+            void pet.offsetWidth;
+            pet.classList.add(cls);
+            setTimeout(() => { pet.classList.remove(cls); pet.classList.add('idle'); }, revertMs);
+        }
+
+        /* ================= 眨眼 ================= */
+        function blink() {
+            blinkTimer = setTimeout(() => {
+                if (currentFace === 'default' && !asleep) {
+                    faces['sleepy'].style.display = '';
+                    faces['default'].style.display = 'none';
+                    setTimeout(() => {
+                        faces['default'].style.display = '';
+                        faces['sleepy'].style.display = 'none';
+                    }, 150);
+                }
+                blink();
+            }, 3000 + Math.random() * 3000);
+        }
+
+        /* ================= Heat 情绪引擎 ================= */
+        function addHeat(n) {
+            heat = Math.max(0, Math.min(100, heat + n));
+            updateHeat();
+        }
+        function updateHeat() {
+            heatOverlay.style.opacity = (heat / 100) * 0.85;
+        }
+        function startHeatDecay() {
+            if (heatInterval) clearInterval(heatInterval);
+            heatInterval = setInterval(() => { if (heat > 0) { heat--; updateHeat(); } }, 30000);
+        }
+
+        /* ================= 孤独递进 ================= */
+        function enterLonelyStage(stage) {
+            if (stage <= lonelyStage && stage !== 5) return;
+            lonelyStage = stage;
+            pet.classList.remove('peek', 'carrying', 'nodding', 'idle', 'asleep');
+            switch (stage) {
+                case 1: // 偷看
+                    setFace('default');
+                    pet.classList.add('peek');
+                    showBubble('…在看什么呀?', 'whisper');
+                    break;
+                case 2: // 吹泡泡
+                    setFace('happy', 3000);
+                    pet.classList.add('idle');
+                    blowBubbles(6);
+                    showBubble('(吹泡泡)', 'whisper');
+                    break;
+                case 3: // 搬东西
+                    setFace('happy', 3000);
+                    pet.classList.add('carrying');
+                    showBubble('(搬东西…)', 'whisper');
+                    break;
+                case 4: // 打瞌睡
+                    setFace('sleepy');
+                    pet.classList.add('nodding');
+                    showBubble('好困…zZ', 'whisper');
+                    break;
+                case 5: // 睡着
+                    setFace('sleep');
+                    asleep = true;
+                    pet.classList.add('asleep');
+                    zzz.classList.add('show');
+                    showBubble('Zzz…', 'whisper');
+                    break;
+            }
+            console.log('[pet] lonely stage: ' + stage);
+        }
+
+        function blowBubbles(n) {
+            for (let i = 0; i < n; i++) {
+                setTimeout(() => {
+                    const b = document.createElement('div');
+                    b.className = 'bubble-float';
+                    b.style.left = (30 + Math.random() * 90) + 'px';
+                    container.appendChild(b);
+                    setTimeout(() => b.remove(), 2600);
+                }, i * 350);
+            }
+        }
+
+        function checkLoneliness() {
+            const idleMin = (Date.now() - lastInteraction) / 60000;
+            if (idleMin >= 30) enterLonelyStage(5);
+            else if (idleMin >= 20) enterLonelyStage(4);
+            else if (idleMin >= 15) enterLonelyStage(3);
+            else if (idleMin >= 10) enterLonelyStage(2);
+            else if (idleMin >= 5) enterLonelyStage(1);
+        }
+
+        /* ================= 唤醒过渡 ================= */
+        function wakeUp() {
+            if (!asleep) return true;
+            asleep = false;
+            lonelyStage = 0;
+            zzz.classList.remove('show');
+            pet.classList.remove('asleep', 'peek', 'carrying', 'nodding');
+            animate('waking', 700);
+            setFace('happy', 2000);
+            showBubble('唔…你回来啦~', 'pink');
+            console.log('[pet] wake');
+            return false; // 本次交互由唤醒消费
+        }
+
+        /* ================= 连击计数 ================= */
+        function registerTap() {
+            tapCount++;
+            if (tapResetTimer) clearTimeout(tapResetTimer);
+            tapResetTimer = setTimeout(() => { tapCount = 0; }, 2000);
+            if (tapCount === 3) {
+                showBubble('戳我三次啦!', 'pink');
+                animate('proud', 600);
+                setFace('happy', 2000);
+                addHeat(3);
+                console.log('[pet] combo x3');
+            } else if (tapCount === 5) {
+                showBubble('五次了!!好痒~', 'pink');
+                animate('proud', 600);
+                setFace('excited', 2500);
+                addHeat(6);
+                console.log('[pet] combo x5');
+            } else if (tapCount === 8) {
+                showBubble('啊啊啊戳了八次!!!', 'shout');
+                animate('spin', 800);
+                setFace('excited', 3000);
+                addHeat(10);
+                console.log('[pet] combo x8');
+            }
+        }
+
+        /* ================= 触发词三级响应 T1/T2/T3 ================= */
+        const T1_WORDS = ['讨厌', '滚', '蠢', '笨蛋', '死', '打死'];
+        const T2_WORDS = ['爱', '喜欢', '想你', '宝贝', '亲亲', '抱抱', '可爱'];
+        const T3_WORDS = ['晚安', '睡觉', '休息', '累了', '加班', '好烦'];
+
+        function analyzePush(text) {
+            if (T1_WORDS.some(w => text.includes(w))) return 1;
+            if (T2_WORDS.some(w => text.includes(w))) return 2;
+            if (T3_WORDS.some(w => text.includes(w))) return 3;
+            return 0;
+        }
+
+        function reactToLevel(level, text) {
+            switch (level) {
+                case 1:
+                    setFace('angry', 3000);
+                    showBubble('!!你居然这么说', 'shout');
+                    addHeat(-8);
+                    break;
+                case 2:
+                    setFace('shy', 3000);
+                    showBubble('诶嘿…', 'pink');
+                    addHeat(12);
+                    break;
+                case 3:
+                    setFace('sleepy', 3000);
+                    showBubble('那要好好休息哦~', 'whisper');
+                    addHeat(4);
+                    break;
+                default:
+                    showBubble(text, 'normal');
+            }
+            console.log('[pet] push level: ' + level);
+        }
+
+        /* ================= 喝水提醒 ================= */
+        function startWaterReminder() {
+            if (waterTimer) clearInterval(waterTimer);
+            waterTimer = setInterval(() => {
+                waterStage++;
+                if (waterStage === 1) {
+                    showBubble('喝水时间到~', 'pink');
+                } else if (waterStage === 2) {
+                    showBubble('该喝水了!', 'shout');
+                    setFace('angry', 2500);
+                } else {
+                    showBubble('快去喝水!!!', 'shout');
+                    setFace('angry', 3000);
+                    animate('shake', 500);
+                }
+                console.log('[pet] water reminder stage: ' + waterStage);
+            }, 120 * 60000);
+        }
+
+        /* ================= 待机独白(时段感知) ================= */
+        function poolForHour(h) {
+            if (h < 6) return POOLS.night;
+            if (h < 9) return POOLS.daily;
+            if (h >= 23) return POOLS.night;
+            return POOLS.daily;
+        }
+
+        function ambientBubble() {
+            if (asleep) return;
+            const h = new Date().getHours();
+            const pool = poolForHour(h);
+            const roll = Math.random();
+            if (roll < 0.6) {
+                showBubble(pool[Math.floor(Math.random() * pool.length)]);
+            } else if (roll < 0.8) {
+                showBubble(POOLS.clingy[Math.floor(Math.random() * POOLS.clingy.length)], 'pink');
+            } else {
+                showBubble(POOLS.chaos[Math.floor(Math.random() * POOLS.chaos.length)], 'jealous');
+            }
+            console.log('[pet] ambient bubble (hour ' + h + ')');
+        }
+
+        /* ================= 心情轮换 ================= */
+        function idleMoodCycle() {
+            moodTimer = setInterval(() => {
+                if (currentFace !== 'default' || asleep || lonelyStage >= 4) return;
+                const pool = ['happy', 'sleepy', 'excited', 'sad', 'shy'];
+                const m = pool[Math.floor(Math.random() * pool.length)];
+                setFace(m, 3000);
+            }, 8000 + Math.random() * 6000);
+        }
+
+        /* ================= 交互登记 ================= */
+        function interact() {
+            lastInteraction = Date.now();
+            if (lonelyStage > 0 && lonelyStage < 5) {
+                lonelyStage = 0;
+                pet.classList.remove('peek', 'carrying', 'nodding', 'asleep');
+            }
+        }
+
+        /* ================= 对外 API ================= */
         window.petEngine = {
             onTap: function() {
-                pet.className = '';
-                void pet.offsetWidth;
-                pet.classList.add('tapped');
-                setTimeout(() => {
-                    pet.className = 'idle';
-                }, 300);
-                showBubble(getRandomReaction('tap'));
+                if (!wakeUp()) return;
+                interact();
+                addHeat(2);
+                animate('tapped', 300);
+                setFace('happy', 1800);
+                showBubble(['Hey!', 'Hmm?', '好耶~', 'Pet me more~', '嗨!'].random());
+                registerTap();
+                window.petEngine.onWaterConfirm();
+                console.log('[pet] tap');
             },
             onDoubleTap: function() {
-                pet.className = '';
-                void pet.offsetWidth;
-                pet.classList.add('double-tapped');
-                setTimeout(() => {
-                    pet.className = 'idle';
-                }, 500);
-                showBubble(getRandomReaction('doubleTap'));
+                if (!wakeUp()) return;
+                interact();
+                addHeat(4);
+                animate('double-tapped', 500);
+                setFace('excited', 2500);
+                showBubble(['Wheee!', 'Dizzy!', '晕了晕了~', 'Spin spin!'].random());
+                console.log('[pet] doubleTap');
             },
             onLongPress: function() {
-                pet.className = '';
-                void pet.offsetWidth;
-                pet.classList.add('long-pressed');
-                setTimeout(() => {
-                    pet.className = 'idle';
-                }, 500);
-                showBubble(getRandomReaction('longPress'));
+                if (!wakeUp()) return;
+                interact();
+                addHeat(3);
+                animate('long-pressed', 500);
+                setFace('sleepy', 2500);
+                showBubble(['!!', '痒痒的...', '///', '摸够了啦~'].random());
+                console.log('[pet] longPress');
             },
             onScreenshot: function() {
-                showBubble(getRandomReaction('screenshot'));
+                interact();
+                addHeat(5);
+                setFace('excited', 2500);
+                showBubble(['Cheese!', '茄子~', '拍我干嘛~', 'Strike a pose!'].random(), 'pink');
+                console.log('[pet] screenshot');
             },
             onAppChanged: function(packageName) {
-                const reactions = {
-                    'com.instagram.android': 'Scrolling Instagram~',
-                    'com.twitter.android': 'Twitter time!',
-                    'com.facebook.katana': 'On Facebook~',
-                    'com.google.android.youtube': 'Watching videos!',
-                    'com.tencent.mm': 'WeChat~',
-                    'com.android.chrome': 'Browsing~'
+                interact();
+                const map = {
+                    'com.instagram.android': ['刷 Ins 呢~', '又在看美女!', '吃醋了!'],
+                    'com.twitter.android': ['Twitter 时间!', '在看啥新闻~'],
+                    'com.facebook.katana': ['FB~', '好久没见这个了'],
+                    'com.google.android.youtube': ['看视频~', '好看吗!'],
+                    'com.tencent.mm': ['微信~', '和谁聊天呢!', '吃醋了!'],
+                    'com.android.chrome': ['上网冲浪~'],
+                    'com.microsoft.emmx': ['在用 Edge 呀~', '查什么呢~'],
+                    'com.termux': ['在敲代码!好厉害~'],
+                    'com.taobao.taobao': ['又在淘宝!买东西啦?', '给我也买一个嘛~'],
+                    'com.ss.android.ugc.aweme': ['刷抖音!都不陪我!', '又是抖音...吃醋!'],
+                    'com.zhihu.android': ['知乎~', '又在看故事~']
                 };
-                const msg = reactions[packageName] || 'Switched app!';
-                showBubble(msg);
+                const list = map[packageName] || ['切换 app 啦!', '在看啥呢~'];
+                const msg = list[Math.floor(Math.random() * list.length)];
+                const style = (msg.includes('吃醋')) ? 'jealous' : 'normal';
+                if (style === 'jealous') { setFace('sad', 2500); addHeat(-3); }
+                else setFace('happy', 1800);
+                showBubble(msg, style);
+                console.log('[pet] appChanged: ' + packageName);
+            },
+            onFling: function(direction) {
+                interact();
+                addHeat(2);
+                pet.classList.remove('idle');
+                pet.classList.add(direction === 'left' ? 'fling-left' : 'fling-right');
+                setTimeout(() => {
+                    pet.classList.remove('fling-left', 'fling-right');
+                    pet.classList.add('climb-back');
+                    setFace('sad', 2000);
+                    showBubble('甩我!自己爬回来…', 'whisper');
+                    setTimeout(() => {
+                        pet.classList.remove('climb-back');
+                        pet.classList.add('idle');
+                    }, 1400);
+                }, 600);
+                console.log('[pet] fling: ' + direction);
+            },
+            onRapidSwitching: function() {
+                interact();
+                setFace('excited', 3000);
+                animate('proud', 600);
+                showBubble('切太快了!耍杂技给你看~', 'jealous');
+                console.log('[pet] rapidSwitching');
+            },
+            onBattery: function(charging, level) {
+                if (charging) {
+                    setFace('happy', 2500);
+                    showBubble('在充电~满血复活!', 'pink');
+                } else if (level < 15) {
+                    setFace('sad', 2500);
+                    showBubble('快没电了...记得充电哦', 'whisper');
+                } else if (level < 30) {
+                    showBubble('电量 ' + level + '%', 'whisper');
+                }
+                console.log('[pet] battery: charging=' + charging + ' level=' + level);
+            },
+            onWaterConfirm: function() {
+                if (waterStage > 0) {
+                    waterStage = 0;
+                    setFace('happy', 2000);
+                    showBubble('乖~喝完啦', 'pink');
+                    console.log('[pet] water confirmed');
+                }
             },
             setState: function(state) {
-                if (state.mood) {
-                    console.log('Mood:', state.mood);
-                }
+                if (state.heat !== undefined) { heat = Math.max(0, Math.min(100, state.heat)); updateHeat(); }
+                if (state.mood && faces[state.mood]) setFace(state.mood, 3000);
                 if (state.bubble) {
-                    showBubble(state.bubble);
+                    const level = analyzePush(state.bubble);
+                    reactToLevel(level, state.bubble);
+                } else if (state.text) {
+                    const level = analyzePush(state.text);
+                    reactToLevel(level, state.text);
                 }
+                console.log('[pet] setState: ' + JSON.stringify(state));
+            },
+            setHour: function(h) {
+                console.log('[pet] hour set: ' + h);
             }
         };
 
+        // 数组随机便捷方法
+        Array.prototype.random = function() { return this[Math.floor(Math.random() * this.length)]; };
+
+        /* ================= 启动序列 ================= */
         setTimeout(() => {
-            const greetings = ['Hello!', 'I\'m here!', 'Pet me~', 'Yawn~'];
-            showBubble(greetings[Math.floor(Math.random() * greetings.length)]);
+            const greetings = ['Hello!', "I'm here!", 'Pet me~', '你来啦~', '想你了~'];
+            showBubble(greetings.random(), 'pink');
         }, 1000);
+
+        setTimeout(() => {
+            blink();
+            idleMoodCycle();
+            startHeatDecay();
+            startWaterReminder();
+            lonelyCheckTimer = setInterval(checkLoneliness, 30000);
+            setInterval(ambientBubble, 25000 + Math.random() * 20000);
+        }, 2500);
+
+        console.log('[pet] engine ready');
     </script>
 </body>
 </html>

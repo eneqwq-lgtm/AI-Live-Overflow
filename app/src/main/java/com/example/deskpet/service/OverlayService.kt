@@ -1,18 +1,27 @@
 package com.example.deskpet.service
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.os.*
 import android.provider.MediaStore
+import android.util.Log
 import android.view.*
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebSettings
 import androidx.core.app.NotificationCompat
+import com.example.deskpet.util.SupabaseClient
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import java.io.File
 import java.util.*
 
@@ -25,6 +34,18 @@ class OverlayService : Service() {
     private var whisperRunnable: Runnable? = null
     private var appTracker: UsageTracker? = null
     private var screenshotObserver: ScreenshotObserver? = null
+
+    private var batteryReceiver: BroadcastReceiver? = null
+    private val switchTimes = ArrayDeque<Long>()
+    private var rapidSwitchCooldown = 0L
+    @Volatile private var pushRunning = false
+    private var pushThread: Thread? = null
+    private var lastSeenMessageId: String? = null
+
+    // Fling 检测:最近一次 MOVE 的时间与位置
+    private var lastMoveTime = 0L
+    private var lastMoveX = 0f
+    private var lastMoveY = 0f
 
     companion object {
         private const val CHANNEL_ID = "pet_overlay_channel"
@@ -47,6 +68,8 @@ class OverlayService : Service() {
         startWhisperRotation()
         startAppTracking()
         startScreenshotDetection()
+        registerBatteryMonitor()
+        startPushPolling()
     }
 
     private fun setupOverlay() {
@@ -67,6 +90,7 @@ class OverlayService : Service() {
 
         overlayView = WebView(this).apply {
             setBackgroundColor(0x00000000)
+            WebView.setWebContentsDebuggingEnabled(true)
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -77,6 +101,18 @@ class OverlayService : Service() {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     return false
+                }
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    Log.i("DeskPet", "page finished: $url")
+                }
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    Log.e("DeskPet", "load error: code=${error?.errorCode} desc=${error?.description} url=${request?.url}")
+                }
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(msg: ConsoleMessage?): Boolean {
+                    Log.i("DeskPet", "JS[${msg?.messageLevel()}]: ${msg?.message()} @ ${msg?.sourceId()}:${msg?.lineNumber()}")
+                    return true
                 }
             }
             loadUrl("file:///android_asset/pet.html")
@@ -115,11 +151,27 @@ class OverlayService : Service() {
                         params?.y = initialY + dy
                         windowManager?.updateViewLayout(overlayView, params)
                     }
+                    lastMoveX = event.rawX
+                    lastMoveY = event.rawY
+                    lastMoveTime = System.currentTimeMillis()
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     val elapsed = System.currentTimeMillis() - touchStartTime
-                    if (!hasMoved) {
+                    if (hasMoved) {
+                        // Fling 检测:快速拖拽后松手 → 甩出屏幕动画
+                        val dt = System.currentTimeMillis() - lastMoveTime
+                        val dxTotal = event.rawX - initialTouchX
+                        if (dt > 0 && Math.abs(dxTotal) > 80) {
+                            val vx = Math.abs(dxTotal) / Math.max(1, (System.currentTimeMillis() - touchStartTime))
+                            if (vx > 1.2f) {
+                                val dir = if (dxTotal > 0) "right" else "left"
+                                overlayView?.evaluateJavascript(
+                                    "window.petEngine && window.petEngine.onFling('$dir')", null
+                                )
+                            }
+                        }
+                    } else {
                         when {
                             elapsed > LONG_PRESS_TIMEOUT -> onLongPress()
                             System.currentTimeMillis() - lastTapTime < DOUBLE_TAP_TIMEOUT -> onDoubleTap()
@@ -221,7 +273,104 @@ class OverlayService : Service() {
                 "window.petEngine && window.petEngine.onAppChanged('$packageName')", null
             )
         }
+        trackRapidSwitching()
         // TODO: POST to Supabase
+    }
+
+    // 60 秒内切换 3 个 app → 杂耍模式
+    private fun trackRapidSwitching() {
+        val now = System.currentTimeMillis()
+        switchTimes.addLast(now)
+        while (switchTimes.isNotEmpty() && now - switchTimes.first() > 60000) {
+            switchTimes.removeFirst()
+        }
+        if (switchTimes.size >= 3 && now - rapidSwitchCooldown > 30000) {
+            rapidSwitchCooldown = now
+            handler.post {
+                overlayView?.evaluateJavascript(
+                    "window.petEngine && window.petEngine.onRapidSwitching()", null
+                )
+            }
+            Log.i("DeskPet", "rapid app switching detected")
+        }
+    }
+
+    /* ================= 电量感知 ================= */
+    private fun registerBatteryMonitor() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                reportBattery(intent)
+            }
+        }
+        registerReceiver(batteryReceiver, filter)
+        reportBattery(registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)))
+    }
+
+    private fun reportBattery(intent: Intent?) {
+        if (intent == null) return
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+        val pct = if (level >= 0 && scale > 0) level * 100 / scale else -1
+        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        val charging = plugged == BatteryManager.BATTERY_PLUGGED_AC ||
+            plugged == BatteryManager.BATTERY_PLUGGED_USB ||
+            plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
+        handler.post {
+            overlayView?.evaluateJavascript(
+                "window.petEngine && window.petEngine.onBattery($charging, $pct)", null
+            )
+        }
+        Log.i("DeskPet", "battery: charging=$charging level=$pct")
+    }
+
+    /* ================= AI 实时推送轮询(Supabase) ================= */
+    private fun startPushPolling() {
+        if (pushRunning) return
+        pushRunning = true
+        pushThread = Thread {
+            while (pushRunning) {
+                Thread.sleep(15000)
+                if (pushRunning) {
+                    try {
+                        pollAiMessages()
+                    } catch (e: Exception) {
+                        Log.w("DeskPet", "push poll error: ${e.message}")
+                    }
+                }
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
+        Log.i("DeskPet", "AI push polling started")
+    }
+
+    private fun pollAiMessages() {
+        val msg = runBlocking { SupabaseClient.fetchLatest("pet_messages", "created_at", 1) } ?: return
+        val id = msg.optString("id", "")
+        if (id.isNotEmpty() && id != lastSeenMessageId) {
+            lastSeenMessageId = id
+            val state = JSONObject().apply {
+                msg.optString("bubble", "").takeIf { it.isNotEmpty() }?.let { put("bubble", it) }
+                msg.optString("text", "").takeIf { it.isNotEmpty() }?.let { put("text", it) }
+                msg.optString("mood", "").takeIf { it.isNotEmpty() }?.let { put("mood", it) }
+                val heatV = msg.optInt("heat", -1)
+                if (heatV in 0..100) put("heat", heatV)
+            }
+            if (state.length() > 0) {
+                handler.post {
+                    overlayView?.evaluateJavascript(
+                        "window.petEngine && window.petEngine.setState(${state.toString()})", null
+                    )
+                }
+                Log.i("DeskPet", "AI push applied: $state")
+            }
+        }
     }
 
     private fun startScreenshotDetection() {
@@ -247,6 +396,15 @@ class OverlayService : Service() {
         whisperRunnable?.let { handler.removeCallbacks(it) }
         appTracker?.stop()
         screenshotObserver?.stop()
+        pushRunning = false
+        pushThread?.interrupt()
+        pushThread = null
+        try {
+            batteryReceiver?.let { unregisterReceiver(it) }
+        } catch (e: IllegalArgumentException) {
+            // 已注销则忽略
+        }
+        batteryReceiver = null
         overlayView?.let {
             windowManager?.removeView(it)
             it.destroy()
